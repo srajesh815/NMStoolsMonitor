@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Search Suggestions with Cache</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        .suggestions-box {
+            position: absolute;
+            width: 100%;
+            z-index: 1000;
+        }
+        .suggestion-item {
+            padding: 8px;
+            background: white;
+            border: 1px solid #dee2e6;
+            cursor: pointer;
+        }
+        .suggestion-item:hover {
+            background: #f1f1f1;
+        }
+        .spinner-box {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+        }
+        .highlight {
+            background: yellow;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body class="p-4">
+
+<div class="container">
+    <h4>Bootstrap Search Suggestion (Cache + Max 50 + Highlight + Spinner)</h4>
+
+    <div class="position-relative">
+        <input type="text" id="searchInput" class="form-control" placeholder="Type to search...">
+
+        <div id="spinner" class="spinner-box" style="display:none;">
+            <div class="spinner-border spinner-border-sm"></div>
+        </div>
+
+        <div id="suggestions" class="suggestions-box"></div>
+    </div>
+</div>
+
+<script>
+const input = document.getElementById("searchInput");
+const box = document.getElementById("suggestions");
+const spinner = document.getElementById("spinner");
+
+// 🚀 CACHE MAP FOR FAST RESULTS
+const cache = new Map();
+
+let debounceTimer;
+
+// Debounce
+function debounce(func, delay) {
+    return function (...args) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => func.apply(this, args), delay);
+    };
+}
+
+function fetchSuggestions(text) {
+    if (text.length < 1) {
+        box.innerHTML = "";
+        return;
+    }
+
+    // 🔥 CHECK CACHE FIRST
+    if (cache.has(text)) {
+        const cachedData = cache.get(text);
+        showSuggestions(cachedData, text);
+        return; // No API call needed
+    }
+
+    spinner.style.display = "block";
+
+    fetch("SearchServlet?query=" + text)
+        .then(res => res.json())
+        .then(data => {
+            spinner.style.display = "none";
+
+            // Limit results
+            const limitedList = data.slice(0, 50);
+
+            // 🔥 SAVE TO CACHE
+            cache.set(text, limitedList);
+
+            showSuggestions(limitedList, text);
+        })
+        .catch(err => {
+            spinner.style.display = "none";
+            console.log(err);
+        });
+}
+
+input.addEventListener(
+    "keyup",
+    debounce(function () {
+        const text = input.value.trim();
+        fetchSuggestions(text);
+    }, 300)
+);
+
+// Show with highlight
+function showSuggestions(list, typedText) {
+    box.innerHTML = "";
+
+    const regex = new RegExp(typedText, "i");
+
+    list.forEach(item => {
+        const highlighted = item.replace(regex, match => 
+            `<span class="highlight">${match}</span>`
+        );
+
+        const div = document.createElement("div");
+        div.classList.add("suggestion-item");
+        div.innerHTML = highlighted;
+
+        div.onclick = () => {
+            input.value = item;
+            box.innerHTML = "";
+        };
+
+        box.appendChild(div);
+    });
+}
+
+// Close on clicking outside
+document.addEventListener("click", function(event) {
+    if (!input.contains(event.target) && !box.contains(event.target)) {
+        box.innerHTML = "";
+    }
+});
+</script>
+
+</body>
+</html>
