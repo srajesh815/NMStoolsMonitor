@@ -12,45 +12,35 @@ public class ExecutorConfig {
     }
 }
 
-@Service
-public class SshService {
+public String runCommand(String deviceHost, String command) throws Exception {
 
-    private static final String JUMP_HOST = "hpna.jumpserver.com";
-    private static final int JUMP_PORT = 8022;
-    private static final String JUMP_USER = "jumpuser";
-    private static final String JUMP_PASS = "jump_pass";
+    // Step 1: Connect to Jump Server
+    SSHClient jump = new SSHClient();
+    jump.addHostKeyVerifier((h, p, key) -> true);
+    jump.connect(JUMP_HOST, JUMP_PORT);
+    jump.authPassword(JUMP_USER, JUMP_PASS);
 
-    private static final String DEVICE_USER = "admin";
-    private static final String DEVICE_PASS = "password123";
+    // Step 2: Create port forwarding
+    int localPort = jump.forwardLocal(0, deviceHost, 22);
 
-    /**
-     * Execute command on a network device through jump server
-     */
-    public String runCommand(String deviceHost, String command) throws Exception {
+    // Step 3: Connect to device using forwarded port
+    SSHClient device = new SSHClient();
+    device.addHostKeyVerifier((h, p, key) -> true);
+    device.connect("127.0.0.1", localPort);
+    device.authPassword(DEVICE_USER, DEVICE_PASS);
 
-        SSHClient ssh = new SSHClient();
+    // Execute command
+    Session session = device.startSession();
+    Session.Command cmd = session.exec(command);
+    String output = IOUtils.readFully(cmd.getInputStream()).toString();
 
-        // Proxy using jump server
-        ProxyCommand proxy = new ProxyCommand(
-                "ssh -W " + deviceHost + ":22 -p " + JUMP_PORT + " " + JUMP_USER + "@" + JUMP_HOST
-        );
-        ssh.setProxy(proxy);
+    // Cleanup
+    cmd.close();
+    session.close();
+    device.disconnect();
+    jump.disconnect();
 
-        ssh.addHostKeyVerifier((h, p, key) -> true); // skip key checking
-        ssh.connect(deviceHost);
-        ssh.authPassword(DEVICE_USER, DEVICE_PASS);
-
-        Session session = ssh.startSession();
-        Session.Command cmd = session.exec(command);
-
-        String output = IOUtils.readFully(cmd.getInputStream()).toString();
-
-        cmd.close();
-        session.close();
-        ssh.disconnect();
-
-        return output;
-    }
+    return output;
 }
 
 @Service
