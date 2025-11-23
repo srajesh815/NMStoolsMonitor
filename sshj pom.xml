@@ -1,0 +1,22 @@
+<dependencies>
+    <!-- SSHJ -->
+    <dependency>
+        <groupId>com.hierynomus</groupId>
+        <artifactId>sshj</artifactId>
+        <version>0.38.0</version>
+    </dependency>
+
+    <!-- Apache Commons CSV -->
+    <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-csv</artifactId>
+        <version>1.9.0</version>
+    </dependency>
+
+    <!-- Lombok (optional) -->
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+    </dependency>
+</dependencies>
+
