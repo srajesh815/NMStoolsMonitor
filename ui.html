@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Device Status Checker — HPNA / NNM / SevOne</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    .suggestions-box { position: absolute; width: 100%; z-index: 1000; }
+    .status-cell { min-width: 110px; text-align: center; vertical-align: middle; }
+    .status-up { background: #d1f7d8; }       /* light green */
+    .status-down { background: #f8d7da; }     /* light red */
+    .status-unknown { background: #e9ecef; }  /* light gray */
+    .small-spinner { width: 1rem; height: 1rem; border-width: .2rem; }
+    .host-row-loading { opacity: 0.85; }
+    .wrap-host { max-width: 480px; }
+    pre { white-space: pre-wrap; word-break: break-word; }
+  </style>
+</head>
+<body class="p-4">
+
+<div class="container">
+  <h3 class="mb-3">Check device status in HPNA, NNM & SevOne</h3>
+
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="row g-2 align-items-center">
+        <div class="col-12 col-md-8">
+          <label class="form-label">Hostnames (comma separated)</label>
+          <input id="hostsInput" class="form-control" placeholder="e.g. device1.example.com, 10.0.0.1, router02" />
+          <div class="form-text">Enter multiple hostnames or IPs separated by commas. Duplicates are ignored.</div>
+        </div>
+
+        <div class="col-12 col-md-4 d-flex align-items-end gap-2">
+          <button id="checkBtn" class="btn btn-primary w-100">Check</button>
+          <button id="clearBtn" class="btn btn-outline-secondary">Clear</button>
+        </div>
+      </div>
+
+      <div class="mt-3 d-flex align-items-center gap-2">
+        <div id="globalSpinner" style="display:none;">
+          <div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div>
+        </div>
+        <div id="summaryText" class="text-muted"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="resultsArea" class="mb-5"></div>
+
+  <div class="card">
+    <div class="card-body">
+      <h6>Notes</h6>
+      <ul>
+        <li>Front-end calls a backend endpoint which should aggregate HPNA, NNM and SevOne checks and return JSON.</li>
+        <li>Backend endpoint example: <code>/api/check?host=&lt;hostname&gt;</code> (see server stub below).</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+/*
+  Front-end logic:
+  - Splits comma-separated hostnames
+  - Removes empties and duplicates
+  - Calls backend endpoint in parallel for each host:
+      GET /api/check?host=<host>
+    expected JSON response:
+    {
+      "host": "device1.example.com",
+      "hpna": "UP" | "DOWN" | "UNKNOWN",
+      "nnm": "UP" | "DOWN" | "UNKNOWN",
+      "sevone": "UP" | "DOWN" | "UNKNOWN",
+      "meta": { ... optional extra info ... }
+    }
+*/
+
+const CHECK_URL = '/api/check?host='; // <-- change to your backend path
+const checkBtn = document.getElementById('checkBtn');
+const clearBtn = document.getElementById('clearBtn');
+const hostsInput = document.getElementById('hostsInput');
+const resultsArea = document.getElementById('resultsArea');
+const globalSpinner = document.getElementById('globalSpinner');
+const summaryText = document.getElementById('summaryText');
+
+function normalizeHosts(raw) {
+  if (!raw) return [];
+  return Array.from(new Set(
+    raw.split(',')
+       .map(s => s.trim())
+       .filter(s => s.length > 0)
+  ));
+}
+
+function statusClass(status) {
+  if (!status) return 'status-unknown';
+  const s = String(status).toLowerCase();
+  if (s === 'up' || s === 'success' || s === 'ok') return 'status-up';
+  if (s === 'down' || s === 'fail' || s === 'error') return 'status-down';
+  return 'status-unknown';
+}
+
+function badgeFor(status) {
+  if (!status) return `<span class="badge bg-secondary">UNKNOWN</span>`;
+  const s = String(status).toLowerCase();
+  if (s === 'up' || s === 'success' || s === 'ok') return `<span class="badge bg-success">UP</span>`;
+  if (s === 'down' || s === 'fail' || s === 'error') return `<span class="badge bg-danger">DOWN</span>`;
+  return `<span class="badge bg-secondary">UNKNOWN</span>`;
+}
+
+function createTable(hosts) {
+  const container = document.createElement('div');
+  container.className = 'table-responsive';
+
+  const table = document.createElement('table');
+  table.className = 'table table-sm table-bordered align-middle';
+
+  const thead = document.createElement('thead');
+  thead.innerHTML = `
+    <tr class="table-light">
+      <th>Host</th>
+      <th class="text-center">HPNA</th>
+      <th class="text-center">NNM</th>
+      <th class="text-center">SevOne</th>
+      <th class="text-center">Details</th>
+    </tr>
+  `;
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  hosts.forEach(host => {
+    const tr = document.createElement('tr');
+    tr.id = `row-${encodeURIComponent(host)}`;
+    tr.innerHTML = `
+      <td class="wrap-host"><strong>${host}</strong></td>
+      <td id="hpna-${encodeURIComponent(host)}" class="status-cell status-unknown">
+        <div class="d-flex justify-content-center align-items-center"><div class="spinner-border spinner-border-sm small-spinner" role="status"></div></div>
+      </td>
+      <td id="nnm-${encodeURIComponent(host)}" class="status-cell status-unknown">
+        <div class="d-flex justify-content-center align-items-center"><div class="spinner-border spinner-border-sm small-spinner" role="status"></div></div>
+      </td>
+      <td id="sevone-${encodeURIComponent(host)}" class="status-cell status-unknown">
+        <div class="d-flex justify-content-center align-items-center"><div class="spinner-border spinner-border-sm small-spinner" role="status"></div></div>
+      </td>
+      <td id="meta-${encodeURIComponent(host)}" class="text-start small"><em>waiting...</em></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  container.appendChild(table);
+  return container;
+}
+
+async function checkAll(hosts) {
+  if (!hosts.length) {
+    resultsArea.innerHTML = `<div class="alert alert-info">No hosts provided.</div>`;
+    return;
+  }
+
+  // render table with loading spinners
+  resultsArea.innerHTML = '';
+  resultsArea.appendChild(createTable(hosts));
+
+  globalSpinner.style.display = 'inline-block';
+  summaryText.textContent = `Checking ${hosts.length} device(s)...`;
+
+  // Run all checks in parallel (one request per host)
+  // Use Promise.allSettled to collect successes and failures independently
+  const promises = hosts.map(host => {
+    const url = CHECK_URL + encodeURIComponent(host);
+    return fetch(url, { method: 'GET' })
+      .then(async res => {
+        if (!res.ok) {
+          // treat non-200 as failure; try to get body if any
+          const body = await res.text().catch(() => '');
+          throw new Error(`HTTP ${res.status} ${body}`);
+        }
+        return res.json();
+      })
+      .then(json => ({ host, ok: true, json }))
+      .catch(err => ({ host, ok: false, error: err }));
+  });
+
+  const results = await Promise.all(promises);
+
+  // update UI rows
+  let upCount = 0, downCount = 0;
+  results.forEach(r => {
+    const hostKey = encodeURIComponent(r.host);
+    const hpnaCell = document.getElementById(`hpna-${hostKey}`);
+    const nnmCell = document.getElementById(`nnm-${hostKey}`);
+    const sevoneCell = document.getElementById(`sevone-${hostKey}`);
+    const metaCell = document.getElementById(`meta-${hostKey}`);
+
+    if (!r.ok) {
+      // mark as unknown / error for all tools
+      if (hpnaCell) { hpnaCell.className = 'status-cell status-unknown'; hpnaCell.innerHTML = badgeFor('UNKNOWN'); }
+      if (nnmCell)  { nnmCell.className  = 'status-cell status-unknown'; nnmCell.innerHTML  = badgeFor('UNKNOWN'); }
+      if (sevoneCell){ sevoneCell.className= 'status-cell status-unknown'; sevoneCell.innerHTML= badgeFor('UNKNOWN'); }
+      if (metaCell) metaCell.innerHTML = `<pre class="mb-0 text-danger">Error: ${escapeHtml(String(r.error.message || r.error))}</pre>`;
+      downCount++; // treat as failed for summary
+      return;
+    }
+
+    const json = r.json || {};
+
+    // expected json keys: hpna, nnm, sevone
+    const hpna = json.hpna ?? 'UNKNOWN';
+    const nnm = json.nnm ?? 'UNKNOWN';
+    const sevone = json.sevone ?? 'UNKNOWN';
+
+    if (hpnaCell) { hpnaCell.className = 'status-cell ' + statusClass(hpna); hpnaCell.innerHTML = badgeFor(hpna); }
+    if (nnmCell)  { nnmCell.className  = 'status-cell ' + statusClass(nnm);  nnmCell.innerHTML  = badgeFor(nnm); }
+    if (sevoneCell){ sevoneCell.className= 'status-cell ' + statusClass(sevone);sevoneCell.innerHTML= badgeFor(sevone); }
+
+    // show meta if provided
+    if (metaCell) {
+      if (json.meta) {
+        metaCell.innerHTML = `<pre class="mb-0">${escapeHtml(JSON.stringify(json.meta, null, 2))}</pre>`;
+      } else {
+        metaCell.innerHTML = `<small class="text-muted">—</small>`;
+      }
+    }
+
+    // summary counts (simple heuristic)
+    if ((hpna && String(hpna).toLowerCase() === 'up') ||
+        (nnm && String(nnm).toLowerCase() === 'up') ||
+        (sevone && String(sevone).toLowerCase() === 'up')) {
+      upCount++;
+    } else {
+      downCount++;
+    }
+  });
+
+  globalSpinner.style.display = 'none';
+  summaryText.textContent = `Done. ${upCount} device(s) reported at least one UP; ${downCount} device(s) reported no UP results or had errors.`;
+}
+
+// small helper for escaping HTML in text insertions
+function escapeHtml(str) {
+  return str.replace(/[&<>"'`]/g, s => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;', '`':'&#96;'
+  })[s]);
+}
+
+checkBtn.addEventListener('click', () => {
+  const raw = hostsInput.value || '';
+  const hosts = normalizeHosts(raw);
+  checkAll(hosts);
+});
+
+clearBtn.addEventListener('click', () => {
+  hostsInput.value = '';
+  resultsArea.innerHTML = '';
+  summaryText.textContent = '';
+});
+</script>
+
+</body>
+</html>
