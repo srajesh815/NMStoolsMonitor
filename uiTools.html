@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Device Status Checker</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        .status-success { background-color: #c8f7c5; font-weight: bold; }
+        .status-fail { background-color: #f7c5c5; font-weight: bold; }
+        .spinner {
+            display: none;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class="p-4">
+
+    <h4>Multi-NMS Device Status Checker</h4>
+
+    <div class="mb-3">
+        <label class="form-label">Enter hostnames (comma separated)</label>
+        <input type="text" id="hostInput" class="form-control" placeholder="router1, switch5, core12">
+    </div>
+
+    <button class="btn btn-primary" onclick="checkStatus()">Check Status</button>
+    <div class="spinner-border spinner" id="spinner"></div>
+
+    <hr>
+
+    <table class="table table-bordered table-striped mt-3" id="resultTable">
+        <thead class="table-dark">
+            <tr>
+                <th>Device</th>
+                <th>HPNA</th>
+                <th>NNM</th>
+                <th>SevOne</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+
+<script>
+// -------------------------
+// API CALL SIMULATION AREA
+// Replace URLs with your servlet or REST API
+// -------------------------
+
+function callHPNA(device) {
+    return fetch("hpnaStatus?device=" + device).then(r => r.json());
+}
+
+function callNNM(device) {
+    return fetch("nnmStatus?device=" + device).then(r => r.json());
+}
+
+function callSevOne(device) {
+    return fetch("sevoneStatus?device=" + device).then(r => r.json());
+}
+
+// -------------------------
+// MAIN FUNCTION
+// -------------------------
+
+async function checkStatus() {
+    const spinner = document.getElementById("spinner");
+    spinner.style.display = "inline-block";
+
+    const tbody = document.querySelector("#resultTable tbody");
+    tbody.innerHTML = "";
+
+    const input = document.getElementById("hostInput").value;
+    
+    const devices = input.split(",")
+        .map(d => d.trim())
+        .filter(d => d.length > 0);
+
+    for (let device of devices) {
+        // 3 API calls in parallel
+        const [hpna, nnm, sevone] = await Promise.all([
+            callHPNA(device),
+            callNNM(device),
+            callSevOne(device)
+        ]);
+
+        const row = document.createElement("tr");
+
+        // Device name
+        row.innerHTML = `<td>${device}</td>`;
+
+        // Add HPNA status
+        row.innerHTML += `<td class="${hpna.status === 'SUCCESS' ? 'status-success' : 'status-fail'}">
+                            ${hpna.status}
+                          </td>`;
+
+        // Add NNM status
+        row.innerHTML += `<td class="${nnm.status === 'SUCCESS' ? 'status-success' : 'status-fail'}">
+                            ${nnm.status}
+                          </td>`;
+
+        // Add SevOne status
+        row.innerHTML += `<td class="${sevone.status === 'SUCCESS' ? 'status-success' : 'status-fail'}">
+                            ${sevone.status}
+                          </td>`;
+
+        tbody.appendChild(row);
+    }
+
+    spinner.style.display = "none";
+}
+
+</script>
+
+</body>
+</html>
