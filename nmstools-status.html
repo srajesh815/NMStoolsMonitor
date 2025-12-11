@@ -1,0 +1,70 @@
+<script>
+function processCSV() {
+    const file = document.getElementById("csvFile").files[0];
+    if (!file) { alert("Please upload CSV"); return; }
+
+    const reader = new FileReader();
+    reader.onload = function(event) {
+        const lines = event.target.result.split("\n");
+
+        lines.forEach(line => {
+            if (!line.trim()) return;
+
+            const [hostname, snmpname] = line.split(",");
+
+            callAllApis(hostname.trim(), snmpname.trim());
+        });
+    };
+    reader.readAsText(file);
+}
+
+
+async function callAllApis(host, snmp) {
+
+    // ---------- Parallel calls & Extract JSON ----------
+    const api1 = fetch("https://your-api1.com/check?host=" + host)
+                    .then(r => r.json());
+    const api2 = fetch("https://your-api2.com/check?host=" + host)
+                    .then(r => r.json());
+    const api3 = fetch("https://your-api3.com/check?host=" + host)
+                    .then(r => r.json());
+
+    const results = await Promise.all([api1, api2, api3]);
+
+    addRow(host, snmp, results);
+}
+
+
+
+function addRow(hostname, snmp, results) {
+    const table = document.querySelector("#resultTable tbody");
+
+    const row = document.createElement("tr");
+
+    const c1 = results[0];
+    const c2 = results[1];
+    const c3 = results[2];
+
+    row.innerHTML = `
+        <td>${hostname}</td>
+        <td>${snmp}</td>
+
+        <td class="${c1.status === 'SUCCESS' ? 'success-cell' : 'fail-cell'}">
+            <b>${c1.status}</b><br>
+            <small>${c1.comments}</small>
+        </td>
+
+        <td class="${c2.status === 'SUCCESS' ? 'success-cell' : 'fail-cell'}">
+            <b>${c2.status}</b><br>
+            <small>${c2.comments}</small>
+        </td>
+
+        <td class="${c3.status === 'SUCCESS' ? 'success-cell' : 'fail-cell'}">
+            <b>${c3.status}</b><br>
+            <small>${c3.comments}</small>
+        </td>
+    `;
+
+    table.appendChild(row);
+}
+</script>
