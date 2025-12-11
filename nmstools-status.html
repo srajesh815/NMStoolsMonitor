@@ -1,7 +1,25 @@
+<div id="spinner" class="text-center my-3" style="display:none;">
+    <div class="spinner-border text-primary" role="status"></div>
+    <div>Loading... Please wait</div>
+</div>
+
 <script>
+
+let pendingRequests = 0; // count how many API calls are running
+
+function showSpinner() {
+    document.getElementById("spinner").style.display = "block";
+}
+
+function hideSpinner() {
+    document.getElementById("spinner").style.display = "none";
+}
+
 function processCSV() {
     const file = document.getElementById("csvFile").files[0];
     if (!file) { alert("Please upload CSV"); return; }
+
+    showSpinner();
 
     const reader = new FileReader();
     reader.onload = function(event) {
@@ -11,7 +29,7 @@ function processCSV() {
             if (!line.trim()) return;
 
             const [hostname, snmpname] = line.split(",");
-
+            pendingRequests++;   // increment per line
             callAllApis(hostname.trim(), snmpname.trim());
         });
     };
@@ -21,17 +39,20 @@ function processCSV() {
 
 async function callAllApis(host, snmp) {
 
-    // ---------- Parallel calls & Extract JSON ----------
-    const api1 = fetch("https://your-api1.com/check?host=" + host)
-                    .then(r => r.json());
-    const api2 = fetch("https://your-api2.com/check?host=" + host)
-                    .then(r => r.json());
-    const api3 = fetch("https://your-api3.com/check?host=" + host)
-                    .then(r => r.json());
+    // Call 3 APIs in parallel
+    const api1 = fetch("https://your-api1.com/check?host=" + host).then(r => r.json());
+    const api2 = fetch("https://your-api2.com/check?host=" + host).then(r => r.json());
+    const api3 = fetch("https://your-api3.com/check?host=" + host).then(r => r.json());
 
     const results = await Promise.all([api1, api2, api3]);
 
     addRow(host, snmp, results);
+
+    pendingRequests--;
+
+    if (pendingRequests === 0) {
+        hideSpinner();   // hide when all API calls finished
+    }
 }
 
 
@@ -67,4 +88,5 @@ function addRow(hostname, snmp, results) {
 
     table.appendChild(row);
 }
+
 </script>
