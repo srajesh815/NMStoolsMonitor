@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>D3 Topology Tree — Multiple VMs per Service</title>
+  <meta charset="utf-8" />
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <style>
+    body { font-family: Arial; padding: 16px; }
+    .node circle { fill: #fff; stroke: #555; stroke-width: 2px; }
+    .node text { font-size: 13px; }
+    .link { fill: none; stroke: #999; stroke-width: 2px; }
+  </style>
+</head>
+<body>
+
+<h2>D3.js – Service Topology (Multiple VMs per Service)</h2>
+<svg id="topology" width="1000" height="650"></svg>
+
+<script>
+// -------- Sample JSON with Multiple VMs per Service --------
+const topologyData = [
+  { serviceName: "Payment-Service", vmName: "vm-pay-01", esxi: "esxi-12", switchName: "vSwitch10", port: "48" },
+  { serviceName: "Payment-Service", vmName: "vm-pay-02", esxi: "esxi-13", switchName: "vSwitch10", port: "52" },
+  { serviceName: "Order-Service",   vmName: "vm-order-01", esxi: "esxi-14", switchName: "vSwitch12", port: "07" },
+  { serviceName: "Order-Service",   vmName: "vm-order-02", esxi: "esxi-15", switchName: "vSwitch12", port: "11" }
+];
+
+// -------- Group by Service -> VM --------
+function buildTree(data) {
+  const serviceMap = {};
+
+  data.forEach(item => {
+    if (!serviceMap[item.serviceName]) {
+      serviceMap[item.serviceName] = {};
+    }
+    if (!serviceMap[item.serviceName][item.vmName]) {
+      serviceMap[item.serviceName][item.vmName] = [];
+    }
+    serviceMap[item.serviceName][item.vmName].push(item);
+  });
+
+  return {
+    name: "Services",
+    children: Object.entries(serviceMap).map(([service, vms]) => ({
+      name: service,
+      children: Object.entries(vms).map(([vm, entries]) => ({
+        name: "VM: " + vm,
+        children: entries.map(x => ({
+          name: "ESXi: " + x.esxi,
+          children: [
+            { name: "Switch: " + x.switchName },
+            { name: "Port: " + x.port }
+          ]
+        }))
+      }))
+    }))
+  };
+}
+
+const treeData = buildTree(topologyData);
+
+// -------- D3 Tree Layout --------
+const svg = d3.select("#topology"),
+      width = +svg.attr("width"),
+      height = +svg.attr("height");
+
+const g = svg.append("g").attr("transform", "translate(80,40)");
+
+const treeLayout = d3.tree().size([height-80, width-200]);
+const root = d3.hierarchy(treeData);
+treeLayout(root);
+
+// Links
+g.selectAll(".link")
+  .data(root.links())
+  .enter().append("path")
+  .attr("class", "link")
+  .attr("d", d3.linkHorizontal()
+    .x(d => d.y)
+    .y(d => d.x)
+  );
+
+// Nodes
+const node = g.selectAll(".node")
+  .data(root.descendants())
+  .enter().append("g")
+  .attr("class", "node")
+  .attr("transform", d => `translate(${d.y},${d.x})`);
+
+node.append("circle").attr("r", 6);
+
+node.append("text")
+  .attr("dy", 4)
+  .attr("x", d => d.children ? -10 : 10)
+  .style("text-anchor", d => d.children ? "end" : "start")
+  .text(d => d.data.name);
+</script>
+
+</body>
+</html>
