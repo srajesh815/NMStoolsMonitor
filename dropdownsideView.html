@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Single Page App</title>
+
+<style>
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+}
+
+/* Layout */
+.container {
+    display: flex;
+    height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+    width: 240px;
+    background: #1f2937;
+    color: white;
+    padding-top: 10px;
+}
+
+.sidebar h3 {
+    padding: 15px;
+    margin: 0;
+    border-bottom: 1px solid #374151;
+}
+
+.menu a {
+    display: block;
+    padding: 12px 20px;
+    color: #e5e7eb;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.menu a:hover {
+    background: #374151;
+}
+
+/* Submenu */
+.submenu {
+    background: #111827;
+    display: none;
+}
+
+.submenu a {
+    padding-left: 40px;
+    font-size: 14px;
+}
+
+/* Content */
+.content {
+    flex: 1;
+    padding: 20px;
+    overflow: auto;
+}
+
+/* Active */
+.active {
+    background: #2563eb;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+    <!-- LEFT MENU -->
+    <div class="sidebar">
+        <h3>My App</h3>
+
+        <div class="menu">
+            <a onclick="loadPage('pages/dashboard.html', this)">Dashboard</a>
+            <a onclick="loadPage('pages/users.html', this)">Users</a>
+
+            <a onclick="toggleMenu('reports')">Reports ▾</a>
+            <div class="submenu" id="reports">
+                <a onclick="loadPage('pages/reports-daily.html', this)">Daily</a>
+                <a onclick="loadPage('pages/reports-monthly.html', this)">Monthly</a>
+            </div>
+
+            <a onclick="loadPage('pages/settings.html', this)">Settings</a>
+        </div>
+    </div>
+
+    <!-- RIGHT CONTENT -->
+    <div class="content" id="content">
+        <h2>Welcome</h2>
+        <p>Select a menu item</p>
+    </div>
+
+</div>
+
+<script>
+function loadPage(page, element) {
+    fetch(page)
+        .then(res => res.text())
+        .then(data => {
+            document.getElementById("content").innerHTML = data;
+        });
+
+    // active menu highlight
+    document.querySelectorAll('.menu a').forEach(a => a.classList.remove('active'));
+    element.classList.add('active');
+}
+
+function toggleMenu(id) {
+    const menu = document.getElementById(id);
+    menu.style.display = menu.style.display === "block" ? "none" : "block";
+}
+</script>
+</body>
+</html>
+
+<h2>Dashboard</h2>
+<p>Overview of system metrics.</p>
+
